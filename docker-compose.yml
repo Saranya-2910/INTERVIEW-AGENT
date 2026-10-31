@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: interview_agent_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_local_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_interview_agent}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app_user} -d ${POSTGRES_DB:-ai_interview_agent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: interview_agent_backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_NAME: "AI Interview Agent"
+      APP_ENV: production
+      API_V1_PREFIX: /api/v1
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8000
+      FRONTEND_ORIGIN: "http://localhost,http://localhost:5173,http://localhost:80"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app_user}:${POSTGRES_PASSWORD:-change_me_local_pass}@db:5432/${POSTGRES_DB:-ai_interview_agent}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change_this_to_a_secure_jwt_secret_in_prod}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 120
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: interview_agent_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+      - "80:80"
+
+volumes:
+  postgres_data:
